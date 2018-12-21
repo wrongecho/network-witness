@@ -3,18 +3,16 @@
 # @Date:   2018-12-16T10:07:12+00:00
 # @Project: HMHouse
 # @Last modified by:   Marcus
-# @Last modified time: 2018-12-21T14:57:46+00:00
+# @Last modified time: 2018-12-21T15:25:15+00:00
 
 # Network Witness
 # Connects to switches and compares command output against known good baselines
 
-# TODO: Fuzzing testing -- check the hosts are nice
 # TODO: Proper exceptions / ignoring changes
 # TODO: Seperate hosts into different lists depending on what we want to do with them?
 #   e.g. switches
 #        uptime monitoring
 #
-# TODO: Make baseline only baseline hosts that do not already have a baseline
 # TODO: Support for SSH?
 
 # Import stuff
@@ -26,7 +24,7 @@ from argparse import ArgumentParser
 
 # ArgumentParser
 parser = ArgumentParser(description='Network Witness monitors network devices for changes from baselines', add_help=False)
-parser.add_argument('-b','--baseline', help='Creates a baselines from switchHosts.txt and quits', action='store_true')
+parser.add_argument('-b','--swbaseline', help='Creates a baselines from switchHosts.txt and quits', action='store_true')
 parser.add_argument('--debug', help='Enables debugging info', action='store_true')
 parser.add_argument('-h', '-?', '--help', help='Help', action='store_true')
 args = parser.parse_args()
@@ -40,7 +38,7 @@ logger.setLevel(logging.DEBUG)
 
 # File logging
 fh = logging.FileHandler('nwitness.log')
-fh.setLevel(logging.WARN) # Log as low as WARN to file
+fh.setLevel(logging.INFO) # Log as low as WARN to file
 # Create formatter and add it to the handlers
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s.')
 fh.setFormatter(formatter)
@@ -53,41 +51,20 @@ formatter = logging.Formatter('\033[1;31;40m%(levelname)s - %(message)s. \033[1;
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
+logger.info("Started network witness")
+
 # Console Log Level: 	ERROR
 # Text Log Level: 	    WARN
 
+# Debugging:            DEBUG
 # General info:         INFO
 # Failed Connections:	ERROR
 # Config Changes:		WARN (So we can write our own errors in the console, and still record them
 # Exceptions:			CRITICAL
 
-def ping(host, friendlyName):
-# Checks hosts are responsive through pings, reports if any do not respond to pings
-
-    logging.debug("Entered ping for " + host)
-
-    # Split the port form the host
-    #host, port = host.split(':')
-
-    # Ping the host with 1 ping (Windows style)
-    # Put the response in pingResponse to be queried later
-    logging.debug("Pinging " + host)
-    pingResponse = subprocess.run(["ping", host, "-n", "1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    # Check if "Reply from [the exact host specified]" is in the ping response
-    # Windows likes to give some whacky ping replies, like replying from the
-    #   host you're pinging from if unreachable
-    if f"Reply from {host}: bytes=32" not in str(pingResponse):
-
-        # Warn the ping failed
-        logging.warn("Ping failed for " + host)
-        print("\a")
-        print("\n\033[1;37;41mNetwork Witness Alert!" + "\033[1;37;40m")
-        print(f"Host {friendlyName} ({host}) did not respond to ping")
-
-        return False
-
-    logging.debug("Ping success for " + host)
+def alertUser():
+    print("\a") # Sound
+    print("\n\033[1;37;41mNetwork Witness Alert!" + "\033[1;37;40m")
 
 def connectTelnet(host, username, password, friendlyName):
 # Opens a new connection to the switch
@@ -235,8 +212,7 @@ def checkSwitchConfig(host, username, password, friendlyName):
                 # For now, just ignore "FastEthernet0/2 " because it's tamzins tv (note the space)
                 if "FastEthernet0/2 " not in currentCfgLine:
 
-                    print("\a")
-                    print("\n\033[1;37;41mNetwork Witness Alert!" + "\033[1;37;40m")
+                    alertUser()
                     print("\033[1;37;41m"+ time.strftime('%b %d, %Y at %H:%M%p %Z') + " - " + friendlyName + " ("+ host.replace('__',':') + ")" + " has changed state from known good." + "\033[1;37;40m")
                     print("\033[1;32;40m     Known Good: ", goodCfgLine)
                     print("\033[1;31;40m     Current:    ", currentCfgLine, "\n" + "\033[1;37;40m")
@@ -246,7 +222,35 @@ def checkSwitchConfig(host, username, password, friendlyName):
     else:
         logger.debug("Current config matches known for " + host)
 
+def ping(host, friendlyName):
+# Checks hosts are responsive through pings, reports if any do not respond to pings
+
+    logging.debug("Entered ping for " + host)
+
+    # Split the port form the host
+    #host, port = host.split(':')
+
+    # Ping the host with 1 ping (Windows style)
+    # Put the response in pingResponse to be queried later
+    logging.debug("Pinging " + host)
+    pingResponse = subprocess.run(["ping", host, "-n", "1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Check if "Reply from [the exact host specified]" is in the ping response
+    # Windows likes to give some whacky ping replies, like replying from the
+    #   host you're pinging from if unreachable
+    if f"Reply from {host}: bytes=32" not in str(pingResponse):
+
+        # Warn the ping failed
+        logging.warn("Ping failed for " + host)
+        alertUser()
+        print(f"{friendlyName} ({host}) did not respond to ping")
+
+        return False
+
+    logging.debug("Ping success for " + host)
+
 def main():
+# The main event!
 
     print("\033[1;37;40mNetwork Witness. \033[0;37;40mHow about a nice game of chess?")
 
@@ -257,8 +261,8 @@ def main():
 
     ## ARGS HELP OUTPUT
     if args.help is True:
-        print("\033[1;37;40mNetwork Witness monitors network devices for changes from baselines\033[0;37;40m\n")
-        print("\033[1;37;40mCreate baselines with ./nw --baseline\033[0;37;40m")
+        print("\033[1;37;40mNetwork Witness monitors network devices\033[0;37;40m\n")
+        print("\033[1;37;40mCreate switch baselines with ./nw --swbaseline\033[0;37;40m")
         print("SWITCH BASELINES")
         print("Populate switchHosts_baseline.txt in the format of HOST:PORT,USER,PASS,FRIENDLYNAME \nThis format is required even if there is no username or password")
         print("         EXAMPLE:    10.0.0.1:23,ADMIN,PASSWORD123,SWITCH")
@@ -272,8 +276,8 @@ def main():
         sys.exit(1)
 
     ## BASELINE CREATION
-    # Create a baseline with the --baseline argument
-    if args.baseline is True:
+    # Create a baseline with the --swbaseline argument
+    if args.swbaseline is True:
         logger.debug("Baseline is found to be true. Creating baselines")
         print("Generating baseline(s)")
         try:
@@ -286,17 +290,19 @@ def main():
                 print("Baseline Created")
                 sys.exit(1)
 
+        ## ERROR HANDLING
+        # File incorrectly formatted
+        except ValueError:
+            logging.error("A line in your switchHosts_baseline.txt is incorrectly formatted (possibly a stray blank line?)")
         # Hosts file does not exist, quitting
         except IOError:
              logger.error("No switchHosts_baseline.txt file found or incorrectly populated. Please populate/create according to help. Quitting")
              logger.debug("IO Error exception for with open('switchHosts_baseline.txt', 'r') as hostsFile:")
              sys.exit(1)
-
         except KeyboardInterrupt:
             print("\033[0;37;40mBye")
             logging.debug("Keyboard Interrupt")
             sys.exit(1)
-
         # All other exceptions
         except Exception as e:
             print("\033[1;31;40mError: something went wrong creating the baseline :(\n")
@@ -307,29 +313,32 @@ def main():
     # Monitor hosts continuously, every 15 seconds
     while True:
         try:
-
             # SWITCH STATUS CHECK
             with open('switchHosts.txt', 'r') as hostsFile:
                 for host in hostsFile:
-
                     try:
                         # TODO: Multithreading?
                         # Clean up the hosts
                         host = host.rstrip("\r\n")
                         host, username, password, friendlyName = host.split(',')
-                         # TODO: Do some error checking, but we can't use logging as we don't want to log passwords!
 
                         # Checking switch config
                         logging.debug("Connecting to " + host + " " +friendlyName + " with checkSwitchConfig()")
                         checkSwitchConfig(host, username, password, friendlyName)
                         logging.debug("Finished call to " + host + " " +friendlyName + " with checkSwitchConfig(). Moving to next host / Starting Over")
-                    except:
+
+                    except ValueError:
+                        # If the hosts are correctly formatted, inform the user and attempt to continue, skipping that host
                         logging.error("A line in your switchHosts.txt is incorrectly formatted (possibly a stray blank line), attempting to continue")
                         pass
+                    except KeyboardInterrupt:
+                        print("\033[0;37;40mBye")
+                        logging.debug("Keyboard Interrupt")
+                        sys.exit(1)
+
             ## PINGS
             with open('pingHosts.txt', 'r') as hostsFile:
                 for host in hostsFile:
-
                     # Clean up the hosts
                     try:
                         host = host.rstrip("\r\n")
@@ -343,18 +352,20 @@ def main():
                     except ValueError:
                         logging.error("A line in your pingHosts.txt is incorrectly formatted (possibly a stray blank line), attempting to continue")
                         pass
+                    except KeyboardInterrupt:
+                        print("\033[0;37;40mBye")
+                        logging.debug("Keyboard Interrupt")
+                        sys.exit(1)
 
         ## ERROR HANDLING
         # A required file does not exist, quitting
         except IOError:
             logger.error("No []Hosts.txt/baseline file found or incorrectly populated. Please populate/create according to help. Quitting")
             sys.exit(1)
-
         except KeyboardInterrupt:
             print("\033[0;37;40mBye")
             logging.debug("Keyboard Interrupt")
             sys.exit(1)
-
         # All other exceptions
         except Exception as e:
             print("\033[1;31;40mError: something went wrong :(\n")
