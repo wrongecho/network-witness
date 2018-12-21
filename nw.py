@@ -3,17 +3,17 @@
 # @Date:   2018-12-16T10:07:12+00:00
 # @Project: HMHouse
 # @Last modified by:   Marcus
-# @Last modified time: 2018-12-20T23:06:46+00:00
+# @Last modified time: 2018-12-21T14:57:46+00:00
 
 # Network Witness
 # Connects to switches and compares command output against known good baselines
 
+# TODO: Fuzzing testing -- check the hosts are nice
 # TODO: Proper exceptions / ignoring changes
 # TODO: Seperate hosts into different lists depending on what we want to do with them?
 #   e.g. switches
 #        uptime monitoring
 #
-# TODO: Ping devices?
 # TODO: Make baseline only baseline hosts that do not already have a baseline
 # TODO: Support for SSH?
 
@@ -21,11 +21,12 @@
 import logging
 import pexpect
 import os, time, sys
+import subprocess
 from argparse import ArgumentParser
 
 # ArgumentParser
 parser = ArgumentParser(description='Network Witness monitors network devices for changes from baselines', add_help=False)
-parser.add_argument('-b','--baseline', help='Creates a baselines from hosts.txt and quits', action='store_true')
+parser.add_argument('-b','--baseline', help='Creates a baselines from switchHosts.txt and quits', action='store_true')
 parser.add_argument('--debug', help='Enables debugging info', action='store_true')
 parser.add_argument('-h', '-?', '--help', help='Help', action='store_true')
 args = parser.parse_args()
@@ -59,6 +60,34 @@ logger.addHandler(ch)
 # Failed Connections:	ERROR
 # Config Changes:		WARN (So we can write our own errors in the console, and still record them
 # Exceptions:			CRITICAL
+
+def ping(host, friendlyName):
+# Checks hosts are responsive through pings, reports if any do not respond to pings
+
+    logging.debug("Entered ping for " + host)
+
+    # Split the port form the host
+    #host, port = host.split(':')
+
+    # Ping the host with 1 ping (Windows style)
+    # Put the response in pingResponse to be queried later
+    logging.debug("Pinging " + host)
+    pingResponse = subprocess.run(["ping", host, "-n", "1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Check if "Reply from [the exact host specified]" is in the ping response
+    # Windows likes to give some whacky ping replies, like replying from the
+    #   host you're pinging from if unreachable
+    if f"Reply from {host}: bytes=32" not in str(pingResponse):
+
+        # Warn the ping failed
+        logging.warn("Ping failed for " + host)
+        print("\a")
+        print("\n\033[1;37;41mNetwork Witness Alert!" + "\033[1;37;40m")
+        print(f"Host {friendlyName} ({host}) did not respond to ping")
+
+        return False
+
+    logging.debug("Ping success for " + host)
 
 def connectTelnet(host, username, password, friendlyName):
 # Opens a new connection to the switch
@@ -142,13 +171,13 @@ def getSwitchConfig(host, username, password, friendlyName):
     baselineOutput = telconn.before
     return baselineOutput
 
-def createSwitchBaseline(host, username, password):
+def createSwitchBaseline(host, username, password, friendlyName):
 # Creates and outputs a baseline for the switch. This function is called by launching NW with --brief
 
     logging.debug("Entered createSwitchBaseline for " + host)
 
     # Our output is
-    baselineOutput = getSwitchConfig(host, username, password)
+    baselineOutput = getSwitchConfig(host, username, password, friendlyName)
     logger.info("Creating baseline for host " + host)
 
     if baselineOutput == False:
@@ -160,7 +189,7 @@ def createSwitchBaseline(host, username, password):
     host = host.replace(':', '__')
 
     # Write the last output to a file
-    fBaseline = open('known_good_' + host + '.txt', 'w')
+    fBaseline = open('switch_known_good_' + host + '.txt', 'w')
     fBaseline.write(baselineOutput)
     fBaseline.close()
     logger.info("Created baseline for host " + host)
@@ -190,7 +219,7 @@ def checkSwitchConfig(host, username, password, friendlyName):
     # Get the configs
     currentSwitchConfig = currentSwitchConfig.splitlines()
     try:
-        knownGoodConfig = open('known_good_' + host + '.txt').read().splitlines()
+        knownGoodConfig = open('switch_known_good_' + host + '.txt').read().splitlines()
     except Exception as e:
         logger.critical("Could not open known good config for " + host)
         logger.debug(e)
@@ -230,12 +259,16 @@ def main():
     if args.help is True:
         print("\033[1;37;40mNetwork Witness monitors network devices for changes from baselines\033[0;37;40m\n")
         print("\033[1;37;40mCreate baselines with ./nw --baseline\033[0;37;40m")
-        print("Populate hosts_baseline.txt in the format of HOST:PORT,USER,PASS,FRIENDLYNAME \nThis format is required even if there is no username or password")
+        print("SWITCH BASELINES")
+        print("Populate switchHosts_baseline.txt in the format of HOST:PORT,USER,PASS,FRIENDLYNAME \nThis format is required even if there is no username or password")
         print("         EXAMPLE:    10.0.0.1:23,ADMIN,PASSWORD123,SWITCH")
         print("         EXAMPLE:    10.0.0.2:23,,PASSWORD,")
         print("         EXAMPLE:    10.0.0.3:23,,,DSWITCH")
         print("         EXAMPLE:    10.0.0.3:23,,,,\n")
-        print("After baselines have generated, rename hosts_baseline.txt to hosts.txt and run the tool normally.")
+        print("After baselines have generated, rename switchHosts_baseline.txt to switchHosts.txt.")
+        print("\n")
+        print("PING HOSTS")
+        print("Populate pingHosts.txt in the format of HOST,FRIENDLYNAME")
         sys.exit(1)
 
     ## BASELINE CREATION
@@ -244,19 +277,19 @@ def main():
         logger.debug("Baseline is found to be true. Creating baselines")
         print("Generating baseline(s)")
         try:
-            with open('hosts_baseline.txt', 'r') as hostsFile:
+            with open('switchHosts_baseline.txt', 'r') as hostsFile:
                 for host in hostsFile:
                     host = host.rstrip("\r\n")
                     host, username, password, friendlyName = host.split(',') # TODO: Make this work without having to put four colons for no user/pw
-                    createSwitchBaseline(host, username, password)
+                    createSwitchBaseline(host, username, password, friendlyName)
                 logger.debug("Baselines created")
                 print("Baseline Created")
                 sys.exit(1)
 
         # Hosts file does not exist, quitting
         except IOError:
-             logger.error("No hosts.txt/baseline file found or incorrectly populated. Please populate/create according to help. Quitting")
-             logger.debug("IO Error exception for open(hosts_baseline.txt)")
+             logger.error("No switchHosts_baseline.txt file found or incorrectly populated. Please populate/create according to help. Quitting")
+             logger.debug("IO Error exception for with open('switchHosts_baseline.txt', 'r') as hostsFile:")
              sys.exit(1)
 
         except KeyboardInterrupt:
@@ -274,18 +307,47 @@ def main():
     # Monitor hosts continuously, every 15 seconds
     while True:
         try:
-            with open('hosts.txt', 'r') as hostsFile:
+
+            # SWITCH STATUS CHECK
+            with open('switchHosts.txt', 'r') as hostsFile:
                 for host in hostsFile:
+
+                    try:
+                        # TODO: Multithreading?
+                        # Clean up the hosts
                         host = host.rstrip("\r\n")
                         host, username, password, friendlyName = host.split(',')
+                         # TODO: Do some error checking, but we can't use logging as we don't want to log passwords!
+
+                        # Checking switch config
                         logging.debug("Connecting to " + host + " " +friendlyName + " with checkSwitchConfig()")
-                        # TODO: Multithreading?
                         checkSwitchConfig(host, username, password, friendlyName)
                         logging.debug("Finished call to " + host + " " +friendlyName + " with checkSwitchConfig(). Moving to next host / Starting Over")
+                    except:
+                        logging.error("A line in your switchHosts.txt is incorrectly formatted (possibly a stray blank line), attempting to continue")
+                        pass
+            ## PINGS
+            with open('pingHosts.txt', 'r') as hostsFile:
+                for host in hostsFile:
 
+                    # Clean up the hosts
+                    try:
+                        host = host.rstrip("\r\n")
+                        host, friendlyName = host.split(',')
+
+                        # Ping the hosts
+                        logging.debug("Pinging " + host + " " + friendlyName + " with ping()")
+                        ping(host, friendlyName)
+                        logging.debug("Finished ping check for " + host + " " + friendlyName)
+
+                    except ValueError:
+                        logging.error("A line in your pingHosts.txt is incorrectly formatted (possibly a stray blank line), attempting to continue")
+                        pass
+
+        ## ERROR HANDLING
         # A required file does not exist, quitting
         except IOError:
-            logger.error("No hosts.txt/baseline file found or incorrectly populated. Please populate/create according to help. Quitting")
+            logger.error("No []Hosts.txt/baseline file found or incorrectly populated. Please populate/create according to help. Quitting")
             sys.exit(1)
 
         except KeyboardInterrupt:
@@ -298,6 +360,8 @@ def main():
             print("\033[1;31;40mError: something went wrong :(\n")
             logger.critical(e)
             break
+
+        ## DONE, LETS SLEEP!
         # Sleep for 15 seconds after querying all hosts
         try:
             logger.debug("All hosts complete. Sleeping")
