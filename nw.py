@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # @Author: Marcus
 # @Date:   2018-12-16T10:07:12+00:00
-# @Project: HMHouse
+# @Project: HMHouse - Net Witness
 # @Last modified by:   Marcus
-# @Last modified time: 2018-12-22T00:50:51+00:00
+# @Last modified time: 2018-12-22T10:44:05+00:00
 
 # Network Witness
 # Connects to switches and compares command output against known good baselines
@@ -64,7 +64,7 @@ logger.info("Started network witness")
 
 def alertUser():
     print("\a") # Sound
-    print("\n\033[1;37;41mNetwork Witness Alert!" + "\033[1;37;40m")
+    print("\n\033[1;37;41mNetwork Witness Alert! (" + time.strftime('%b %d, %Y at %H:%M%p %Z') + ")" + "\033[1;37;40m")
 
 def connectTelnet(host, username, password, friendlyName):
 # Opens a new connection to the switch
@@ -209,9 +209,9 @@ def checkSwitchConfig(host, username, password, friendlyName):
                 if "FastEthernet0/2 " not in currentCfgLine:
 
                     alertUser()
-                    print("\033[1;37;41m"+ time.strftime('%b %d, %Y at %H:%M%p %Z') + " - " + friendlyName + " ("+ host.replace('__',':') + ")" + " has changed state from known good." + "\033[1;37;40m")
-                    print("\033[1;32;40m     Known Good: ", goodCfgLine)
-                    print("\033[1;31;40m     Current:    ", currentCfgLine, "\n" + "\033[1;37;40m")
+                    print("\033[1;37;41m" + friendlyName + " ("+ host.replace('__',':') + ")" + " has changed state from known good." + "\033[1;37;40m")
+                    print("\033[1;32;40mKnown Good: ", goodCfgLine)
+                    print("\033[1;31;40mCurrent:    ", currentCfgLine, "\n" + "\033[1;37;40m")
                     logger.warn("CONFIG FILE CHANGE for " + host + ". " + goodCfgLine + " has changed to " + currentCfgLine)
                 else:
                     logger.debug("Ignoring " + currentCfgLine + " for host "+ host + " due to exception.")
