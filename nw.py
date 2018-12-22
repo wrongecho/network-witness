@@ -3,7 +3,7 @@
 # @Date:   2018-12-16T10:07:12+00:00
 # @Project: HMHouse
 # @Last modified by:   Marcus
-# @Last modified time: 2018-12-21T15:25:15+00:00
+# @Last modified time: 2018-12-22T00:50:51+00:00
 
 # Network Witness
 # Connects to switches and compares command output against known good baselines
@@ -23,7 +23,7 @@ import subprocess
 from argparse import ArgumentParser
 
 # ArgumentParser
-parser = ArgumentParser(description='Network Witness monitors network devices for changes from baselines', add_help=False)
+parser = ArgumentParser(description='Network Witness monitors network devices', add_help=False)
 parser.add_argument('-b','--swbaseline', help='Creates a baselines from switchHosts.txt and quits', action='store_true')
 parser.add_argument('--debug', help='Enables debugging info', action='store_true')
 parser.add_argument('-h', '-?', '--help', help='Help', action='store_true')
@@ -37,7 +37,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 # File logging
-fh = logging.FileHandler('nwitness.log')
+fh = logging.FileHandler('nw.log')
 fh.setLevel(logging.INFO) # Log as low as WARN to file
 # Create formatter and add it to the handlers
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s.')
@@ -68,7 +68,6 @@ def alertUser():
 
 def connectTelnet(host, username, password, friendlyName):
 # Opens a new connection to the switch
-
     logging.debug("Entered connectTelnet for " + host)
 
     # Format the host properly if we're using a non standard port, so telnet can connect
@@ -126,7 +125,6 @@ def connectTelnet(host, username, password, friendlyName):
 
 def getSwitchConfig(host, username, password, friendlyName):
 # Returns the switch configuration
-
     logging.debug("Entered getSwitchConfig for " + host)
 
     # Open a connection
@@ -150,7 +148,6 @@ def getSwitchConfig(host, username, password, friendlyName):
 
 def createSwitchBaseline(host, username, password, friendlyName):
 # Creates and outputs a baseline for the switch. This function is called by launching NW with --brief
-
     logging.debug("Entered createSwitchBaseline for " + host)
 
     # Our output is
@@ -175,7 +172,6 @@ def createSwitchBaseline(host, username, password, friendlyName):
 
 def checkSwitchConfig(host, username, password, friendlyName):
 # Checks if the current config matches the running config. Prints lines that do not match.
-
     logging.debug("Entered checkSwitchConfig for " + host)
 
     # Grabs the running switch config from getSwitchConfig
@@ -224,11 +220,7 @@ def checkSwitchConfig(host, username, password, friendlyName):
 
 def ping(host, friendlyName):
 # Checks hosts are responsive through pings, reports if any do not respond to pings
-
     logging.debug("Entered ping for " + host)
-
-    # Split the port form the host
-    #host, port = host.split(':')
 
     # Ping the host with 1 ping (Windows style)
     # Put the response in pingResponse to be queried later
@@ -251,7 +243,6 @@ def ping(host, friendlyName):
 
 def main():
 # The main event!
-
     print("\033[1;37;40mNetwork Witness. \033[0;37;40mHow about a nice game of chess?")
 
     ## LOGGING - Enable logging if --debug is set
@@ -262,17 +253,17 @@ def main():
     ## ARGS HELP OUTPUT
     if args.help is True:
         print("\033[1;37;40mNetwork Witness monitors network devices\033[0;37;40m\n")
-        print("\033[1;37;40mCreate switch baselines with ./nw --swbaseline\033[0;37;40m")
+        print("Current functionality: Pings hosts and monitors switches for interface state changes\n")
         print("SWITCH BASELINES")
+        print("\033[1;37;40mCreate switch baselines with ./nw --swbaseline\033[0;37;40m")
         print("Populate switchHosts_baseline.txt in the format of HOST:PORT,USER,PASS,FRIENDLYNAME \nThis format is required even if there is no username or password")
         print("         EXAMPLE:    10.0.0.1:23,ADMIN,PASSWORD123,SWITCH")
         print("         EXAMPLE:    10.0.0.2:23,,PASSWORD,")
         print("         EXAMPLE:    10.0.0.3:23,,,DSWITCH")
         print("         EXAMPLE:    10.0.0.3:23,,,,\n")
-        print("After baselines have generated, rename switchHosts_baseline.txt to switchHosts.txt.")
-        print("\n")
+        print("After baselines have generated, rename switchHosts_baseline.txt to switchHosts.txt.\n")
         print("PING HOSTS")
-        print("Populate pingHosts.txt in the format of HOST,FRIENDLYNAME")
+        print("Populate pingHosts.txt in the format of HOST,FRIENDLYNAME\n")
         sys.exit(1)
 
     ## BASELINE CREATION
